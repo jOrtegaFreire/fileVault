@@ -51,3 +51,8 @@ def decrypt(data,key):
         return pt
     except (ValueError,KeyError):
         print("Key Error")
+
+def password_verify(password,hash):
+    _hash=hashlib.new('sha256')
+    _hash.update(password.encode())
+    return _hash.hexdigest()==hash
