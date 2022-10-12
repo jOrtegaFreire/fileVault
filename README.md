@@ -1,2 +1,2 @@
 # fileVault
-simple encrypted file manager using aes-256
+simple encrypted file manager using
