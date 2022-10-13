@@ -1,8 +1,8 @@
-from tkinter import Menu, Tk, Toplevel
+from tkinter import Menu, Tk, Toplevel, filedialog
 from sys import exit
 from widgets import CustomMenuBar,CustomFileFrame,CustomMenu,LockScreen,ChangeKeyFrame
-from aes import password_verify,generate_key
-from os import system
+from aes import password_verify,generate_key,encrypt
+from os import system, path, remove
 from pathlib import Path
 import json
 
@@ -44,6 +44,13 @@ class MainWindow(Toplevel):
         with open("settings.json","r") as f:
             self.settings=json.load(f)
 
+        #load db
+        with open("vault.json","r")as f:
+            self.vault=json.load(f)
+
+        #session file history
+        self.file_history=[]
+
         #lockscreen
         self.lock_screen=LockScreen(self,self.width,self.height,self.window_bg,self.settings)
 
@@ -53,12 +60,11 @@ class MainWindow(Toplevel):
 
         #file menu
         self.file_menu=CustomMenu(self,bg=self.menubar_bg)
-        self.file_menu.add_menu_item(label="Add File")
-        self.file_menu.add_menu_item(label="Extract File")
+        self.file_menu.add_menu_item(label="Add File",command=self.add_file)
         self.file_menu.add_menu_item(label="Open Encrypted Folder",command=lambda:system('start '+self.settings['encrypted']))
         # self.file_menu.add_menu_item(label="Open Encrypted Folder",command=lambda:system('start '+str(Path(__file__).parent.parent.resolve())))
         self.file_menu.add_menu_item(label="Open Decrypted Folder",command=lambda:system('start '+self.settings['decrypted']))
-        self.file_menu.add_menu_item(label="Clear Session")
+        self.file_menu.add_menu_item(label="Clear Session",command=self.clear_session)
         self.file_menu.add_menu_item(label="Exit",command=self.exit)
         self.menubar.add_menu(label="File",menu=self.file_menu)
 
@@ -82,13 +88,50 @@ class MainWindow(Toplevel):
         self.bind('<Control-d>',exit)
         self.lock()
 
-        
-    def add_file(self):pass
+    #add file to the vault    
+    def add_file(self):
+        ftypes=[("All","*.*")]
+        fileDialog=filedialog.askopenfilename(filetypes=ftypes)
+        if fileDialog!='':
+            ext=fileDialog.split('.')[-1]
+            file_name=generate_key(str(len(self.vault)))
+            self.vault[file_name]=ext
+            with open(fileDialog,"rb") as f:
+                data=f.read()
+                encrypted_data=encrypt(data,bytes.fromhex(self.settings['key']))
+                with open(self.settings['encrypted']+"/"+file_name,"wb") as g:
+                    g.write(encrypted_data.iv)
+                    g.write(encrypted_data.ct)
+            self.update_vault()
+    #decript file and store it in tmp folder
+    def extract_file(self,file_name):pass
+
+    #lock screen
     def lock(self,*args):
         self.lock_screen.place(x=0,y=0)
         self.lock_screen.tkraise()
+    #change key screen
     def change_key(self):
         tmp=ChangeKeyFrame(self,self.width,height=self.height,bg=self.window_bg,settings=self.settings)
         tmp.place(x=0,y=0)
         tmp.tkraise()
-    def exit(self):exit()
+    #update vault.json file
+    def update_vault(self):
+        json_object=json.dumps(self.vault,indent=4)
+        with open("vault.json","w") as f:
+            f.write(json_object)
+    #rewrite extracted files content to  0xFF and the remove them
+    def clear_session(self):
+        for session_file in self.file_history:
+            ext=self.vault[session_file]
+            file_name=session_file+"."+ext
+            file_size=path.getsize(self.settings['decrypted']+"/"+file_name)
+            content=b"\xFF"*file_size
+            with open(self.settings['decrypted']+"/"+file_name,"wb") as f:
+                f.write(content)
+            remove(self.settings['decrypted']+"/"+file_name)
+            self.file_history.remove(session_file)
+    #clear session and exit application    
+    def exit(self):
+        self.clear_session()
+        exit()

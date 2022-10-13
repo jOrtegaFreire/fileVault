@@ -30,7 +30,9 @@ class LockScreen(Frame):
 
     def unlock(self,*args):
         buffer=self.password_entry.get()
-        if password_verify(buffer,self.settings['key']):self.place_forget()
+        if password_verify(buffer,self.settings['key']):
+            self.password_entry.delete(0,END)
+            self.place_forget()
         else:
             self.errorMsg.place(x=int((self.width-self.errorMsg.winfo_reqwidth())/2),y=350)
             self.after(500,self.clear)
