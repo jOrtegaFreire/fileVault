@@ -3,6 +3,7 @@ from tkinter import END, W, Button, Entry, Frame,Label
 from PIL.ImageTk import PhotoImage
 from PIL import Image
 from aes import password_verify,generate_key
+import pyautogui
 
 class LockScreen(Frame):
 
@@ -231,8 +232,117 @@ class CustomMenuItem(Button):
     def on_enter(self,event):self.configure(bg="#4e4e4e")
     def on_leave(self,event):self.configure(bg=self.container.bg)
 
-
 class CustomFileFrame(Frame):
 
     def __init__(self,container,width=1,height=1,bg="Black"):
+        self.files=[]
+        self.item_height=10
+        self.width=width
+        self.text_width=int(self.width/8)
+        self.bg=bg
         super().__init__(container,width=width,height=height,bg=bg)
+
+
+    def add_file(self,vault):
+        file=list(vault)[-1]
+        self.files.append(FileItem(self,label=file,ext=vault[file]))
+        self.item_height=self.files[-1].winfo_reqheight()
+        self.files[-1].place(x=0,y=(len(vault)-1)*self.item_height,width=self.width)
+
+    def add_files(self,vault):
+        for idx,file in enumerate(vault):
+            self.files.append(FileItem(self,label=file,ext=vault[file]))
+            self.item_height=self.files[-1].winfo_reqheight()
+            self.files[-1].place(x=0,y=idx*self.item_height,width=self.width)
+
+
+class FileItem(Button):
+    def __init__(self,container,label="file_name",ext=None,height=1):
+        self.container=container
+        self.file_name=label
+        self.ext=ext
+        super().__init__(container,font=("Courier",10),width=container.width,height=height,bg=container.bg,
+                    fg="#c4c4c4",activebackground="#9a9a9a",bd=0)
+        self.set_text()
+
+    def set_text(self):
+        self.configure(text=self.file_name[:self.container.text_width-4]+'...',anchor=W)
+
+class FileItemOptions(Frame):
+
+    def __init__(self,container,width=1,height=1,bg="Black",file_item=None):
+        self.container=container
+        self.file_item=file_item
+        self.width=width
+        self.height=height
+        self.bg=bg
+        super().__init__(container,width=width,height=height,bg=bg)
+
+        self.openBtn=Button(self,text="Open",font=("Courier",10),bg=self.bg,fg="#c4c4c4",activebackground="#9a9a9a",
+                        bd=0,highlightthickness=0,command=self.open_file,padx=10,pady=5,anchor=W)
+        self.extractBtn=Button(self,text="Extract",font=("Courier",10),bg=self.bg,fg="#c4c4c4",activebackground="#9a9a9a",
+                        bd=0,highlightthickness=0,command=self.extract_file,padx=10,pady=5,anchor=W)
+        self.deleteBtn=Button(self,text="Delete",bg=self.bg,font=("Courier",10),fg="#c4c4c4",activebackground="#9a9a9a",
+                        bd=0,highlightthickness=0,command=self.delete_file,padx=10,pady=5,anchor=W)
+
+        self.openBtn.place(x=0,y=0,width=self.width)
+        self.extractBtn.place(x=0,y=self.extractBtn.winfo_reqheight(),width=self.width)
+        self.deleteBtn.place(x=0,y=2*self.extractBtn.winfo_reqheight(),width=self.width)
+
+        self.openBtn.bind('<Enter>',self.on_enter)
+        self.extractBtn.bind('<Enter>',self.on_enter)
+        self.deleteBtn.bind('<Enter>',self.on_enter)
+        self.openBtn.bind('<Leave>',self.on_leave)
+        self.extractBtn.bind('<Leave>',self.on_leave)
+        self.deleteBtn.bind('<Leave>',self.on_leave)
+
+    #highlight on mouse hoover
+    def on_enter(self,event):event.widget.configure(bg="#505050")
+    #highlight on mouse hoover
+    def on_leave(self,event):event.widget.configure(bg=self.bg)
+    #show pop up menu 
+    def show(self,x,y):self.place(x=x,y=y)
+    #open file
+    def open_file(self):
+        self.container.open_file(self.file_item.file_name)
+        self.destroy()
+    #extract file to decrypted folder
+    def extract_file(self):
+        self.container.extract(self.file_item.file_name)
+        self.destroy()
+    def delete_file(self):
+        print("deliting "+self.file_name+"."+self.file_item.ext)
+        self.destroy()
+
+class ProgressFrame(Frame):
+
+    def __init__(self,container,width=1,height=1,bg="Black",label="Progress"):
+        self.container=container
+        self.width=width
+        self.height=height
+        self.bg=bg
+        super().__init__(container,width=width,height=height,bg=bg)
+        self.progressBarFrame=Frame(self,width=self.width-200,height=50,bg=self.bg)
+        self.progressBar=Frame(self.progressBarFrame,width=100,height=50,bg="#505050")
+        self.speed=10
+        self.message=Label(self,text=label,font=("Courier",18),bg=self.bg,
+                            fg="Gray")
+        self.progressBar.place(x=0,y=0)
+        self.progressBarFrame.place(x=(int(self.width-self.progressBarFrame.winfo_reqwidth())/2),
+                                    y=int((self.height-self.progressBarFrame.winfo_reqheight())/2))
+        self.message.place(x=int((self.width-self.message.winfo_reqwidth())/2),
+                            y=int((self.height-self.progressBarFrame.winfo_reqheight())/2)+75)
+
+    def show(self):
+        self.place(x=0,y=0)
+        self.wait_visibility()
+        self.tkraise()
+        self.animate()
+
+    def animate(self):
+        if self.progressBar.winfo_x()+self.progressBar.winfo_reqwidth()>=self.width-200 and self.speed>0:
+            self.speed*=-1
+        elif self.progressBar.winfo_x()<=0 and self.speed<0:
+            self.speed*=-1
+        self.progressBar.place(x=self.progressBar.winfo_x()+self.speed,y=0)
+        self.after(10,self.animate)

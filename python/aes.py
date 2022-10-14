@@ -52,6 +52,19 @@ def decrypt(data,key):
     except (ValueError,KeyError):
         print("Key Error")
 
+def read_encrypted_data(path):
+    iv=None
+    ct=None
+    with open(path,"rb") as f:
+        iv=f.read(16)
+        ct=f.read()
+    return encrypted_data(iv=iv,ct=ct)
+
+def write_decrypted_file(path,data):
+    with open(path,"wb") as f:
+        f.write(data)
+
+
 def password_verify(password,hash):
     _hash=hashlib.new('sha256')
     _hash.update(password.encode())

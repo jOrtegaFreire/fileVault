@@ -1,7 +1,8 @@
+import threading
 from tkinter import Menu, Tk, Toplevel, filedialog
 from sys import exit
-from widgets import CustomMenuBar,CustomFileFrame,CustomMenu,LockScreen,ChangeKeyFrame
-from aes import password_verify,generate_key,encrypt
+from widgets import CustomMenuBar,CustomFileFrame,CustomMenu,LockScreen,ChangeKeyFrame,FileItemOptions,ProgressFrame
+from aes import password_verify,generate_key,encrypt,read_encrypted_data,decrypt,write_decrypted_file
 from os import system, path, remove
 from pathlib import Path
 import json
@@ -38,7 +39,11 @@ class MainWindow(Toplevel):
         self.menubar_bg="#2b2b2b"
         self.sidebars_bg="#303030"
         self.window_bg="#1b1b1b"
+        self.file_item_bg="#404040"
         self.configure(background=self.window_bg)
+
+        #file_options flag
+        self.file_options_menu=None
 
         #load settings
         with open("settings.json","r") as f:
@@ -65,7 +70,7 @@ class MainWindow(Toplevel):
         # self.file_menu.add_menu_item(label="Open Encrypted Folder",command=lambda:system('start '+str(Path(__file__).parent.parent.resolve())))
         self.file_menu.add_menu_item(label="Open Decrypted Folder",command=lambda:system('start '+self.settings['decrypted']))
         self.file_menu.add_menu_item(label="Clear Session",command=self.clear_session)
-        self.file_menu.add_menu_item(label="Exit",command=self.exit)
+        self.file_menu.add_menu_item(label="Exit",command=lambda:self.exit(None))
         self.menubar.add_menu(label="File",menu=self.file_menu)
 
         #Settings menu
@@ -81,30 +86,115 @@ class MainWindow(Toplevel):
         # self.menubar.add_menu(label="Help")
 
         #file panel
-        self.file_panel=CustomFileFrame(self,width=240,height=self.height-30,bg=self.sidebars_bg)
+        self.file_panel=CustomFileFrame(self,width=200,height=self.height-30,bg=self.sidebars_bg)
         self.file_panel.place(x=0,y=30)
+        
+        self.file_panel.add_files(self.vault)
+        self.bind_files()
 
         self.bind('<Control-q>',self.lock)
-        self.bind('<Control-d>',exit)
+        self.bind('<Control-d>',self.exit)
         self.lock()
 
+    #bind mouse buttons to file on filelist
+    def bind_files(self):
+        for file in self.file_panel.files:
+            file.bind('<Button-1>',self.file_options)
+            file.bind('<Button-3>',self.remove_file_options)
+    #show file options pop up menu
+    def file_options(self,event):
+        if self.file_options_menu!=None:
+            self.file_options_menu.destroy()
+        self.file_options_menu=FileItemOptions(self,width=100,height=90,bg=self.file_item_bg,file_item=event.widget)
+        x=self.winfo_pointerx()-self.winfo_rootx()
+        y=self.winfo_pointery()-self.winfo_rooty()
+        self.file_options_menu.show(x=x,y=y)
+    #destroy file options pop up menu
+    def remove_file_options(self,event):
+        if self.file_options_menu!=None:self.file_options_menu.destroy()
     #add file to the vault    
     def add_file(self):
         ftypes=[("All","*.*")]
         fileDialog=filedialog.askopenfilename(filetypes=ftypes)
         if fileDialog!='':
-            ext=fileDialog.split('.')[-1]
-            file_name=generate_key(str(len(self.vault)))
-            self.vault[file_name]=ext
-            with open(fileDialog,"rb") as f:
-                data=f.read()
-                encrypted_data=encrypt(data,bytes.fromhex(self.settings['key']))
-                with open(self.settings['encrypted']+"/"+file_name,"wb") as g:
-                    g.write(encrypted_data.iv)
-                    g.write(encrypted_data.ct)
-            self.update_vault()
+            progress_frame=ProgressFrame(self,width=self.width,height=self.height,bg=self.window_bg,
+                            label="Loading and Encrypting File...")
+            progress_frame.show()
+            _thread=threading.Thread(target=self.encrypt_file,args=(fileDialog,))
+            _thread.start()
+            self.wait_and_load(progress_frame)
+            # ext=fileDialog.split('.')[-1]
+            # file_name=generate_key(str(len(self.vault)))
+            # self.vault[file_name]=ext
+            # with open(fileDialog,"rb") as f:
+            #     data=f.read()
+            #     encrypted_data=encrypt(data,bytes.fromhex(self.settings['key']))
+            #     with open(self.settings['encrypted']+"/"+file_name,"wb") as g:
+            #         g.write(encrypted_data.iv)
+            #         g.write(encrypted_data.ct)
+            # self.update_vault()
+            # self.file_panel.add_file(self.vault)
+    def wait_and_load(self,progress_frame):
+        if self.io_task:self.after(100,self.wait_and_load,progress_frame)
+        else:progress_frame.destroy()
+    
+    def encrypt_file(self,file):
+        self.io_task=True
+        ext=file.split('.')[-1]
+        file_name=generate_key(str(len(self.vault)))
+        self.vault[file_name]=ext
+        with open(file,"rb") as f:
+            data=f.read()
+            encrypted_data=encrypt(data,bytes.fromhex(self.settings['key']))
+            with open(self.settings['encrypted']+"/"+file_name,"wb") as g:
+                g.write(encrypted_data.iv)
+                g.write(encrypted_data.ct)
+        self.update_vault()
+        self.file_panel.add_file(self.vault)
+        self.file_panel.files[-1].bind('<Button-1>',self.file_options)
+        self.file_panel.files[-1].bind('<Button-3>',self.remove_file_options)
+
+        self.io_task=False        
+    #open file
+    def open_file(self,file_name):
+        if file_name not in self.file_history:
+            progress_frame=ProgressFrame(self,width=self.width,height=self.height,bg=self.window_bg,
+                            label="Loading and Decrypting File...")
+            progress_frame.show()
+            _thread=threading.Thread(target=self.extract_file,args=(file_name,))
+            _thread.start()
+            self.wait_and_open(progress_frame, file_name)
+        else:
+            system('start '+self.settings['decrypted']+"/"+file_name+"."+self.vault.get(file_name))
+        
+    #wait for io_task to end and opens file
+    def wait_and_open(self,progress_frame,file_name):
+        if self.io_task:self.after(100,self.wait_and_open,progress_frame,file_name)
+        else:
+            progress_frame.destroy()        
+            system('start '+self.settings['decrypted']+"/"+file_name+"."+self.vault.get(file_name))
+    #helper function to show progress bar while decrypting
+    def extract(self,file_name):
+        progress_frame=ProgressFrame(self,width=self.width,height=self.height,bg=self.window_bg,
+                        label="Decrypting File...")
+        progress_frame.show()
+        _thread=threading.Thread(target=self.extract_file,args=(file_name,))
+        _thread.start()
+        self.wait_and_extract(progress_frame)
+    #wait for io_task to end and decrypt file
+    def wait_and_extract(self,progress_frame):
+        if self.io_task:self.after(100,self.wait_and_extract,progress_frame)
+        else:progress_frame.destroy()
     #decript file and store it in tmp folder
-    def extract_file(self,file_name):pass
+    def extract_file(self,file_name):
+        self.io_task=True
+        path=self.settings['encrypted']+"/"+file_name
+        data=read_encrypted_data(path)
+        decrypted_data=decrypt(data,bytes.fromhex(self.settings.get('key')))
+        output_path=self.settings.get('decrypted')+"/"+file_name+"."+self.vault.get(file_name)
+        write_decrypted_file(output_path, decrypted_data)
+        self.file_history.append(file_name)
+        self.io_task=False
 
     #lock screen
     def lock(self,*args):
@@ -122,6 +212,7 @@ class MainWindow(Toplevel):
             f.write(json_object)
     #rewrite extracted files content to  0xFF and the remove them
     def clear_session(self):
+        self.io_task=True
         for session_file in self.file_history:
             ext=self.vault[session_file]
             file_name=session_file+"."+ext
@@ -130,8 +221,22 @@ class MainWindow(Toplevel):
             with open(self.settings['decrypted']+"/"+file_name,"wb") as f:
                 f.write(content)
             remove(self.settings['decrypted']+"/"+file_name)
-            self.file_history.remove(session_file)
+        self.file_history.clear()
+        self.io_task=False
     #clear session and exit application    
-    def exit(self):
-        self.clear_session()
-        exit()
+    def exit(self,event):
+        progress_frame=ProgressFrame(self,width=self.width,height=self.height,bg=self.window_bg,
+                        label="Clearing Session Files...")
+        progress_frame.show()
+        _thread=threading.Thread(target=self.clear_session)
+        _thread.start()
+        # self.after(100,self.clear_session)
+        self.wait_and_exit(progress_frame)
+
+    def wait_and_exit(self,progress_frame):
+        if self.io_task:
+            self.after(100,self.wait_and_exit,progress_frame)
+        else:
+            progress_frame.destroy()
+            exit()
+
