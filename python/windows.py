@@ -1,7 +1,8 @@
 import threading
 from tkinter import Menu, Tk, Toplevel, filedialog
 from sys import exit
-from widgets import CustomMenuBar,CustomFileFrame,CustomMenu,LockScreen,ChangeKeyFrame,FileItemOptions,ProgressFrame
+from widgets import CustomMenuBar,CustomFileFrame,CustomMenu,LockScreen,ChangeKeyFrame,FileItemOptions
+from widgets import ProgressFrame, WelcomeScreen
 from aes import password_verify,generate_key,encrypt,read_encrypted_data,decrypt,write_decrypted_file
 from os import system, path, remove
 from pathlib import Path
@@ -41,6 +42,9 @@ class MainWindow(Toplevel):
         self.window_bg="#1b1b1b"
         self.file_item_bg="#404040"
         self.configure(background=self.window_bg)
+
+        #encryption key
+        self.key=None
 
         #file_options flag
         self.file_options_menu=None
@@ -94,7 +98,9 @@ class MainWindow(Toplevel):
 
         self.bind('<Control-q>',self.lock)
         self.bind('<Control-d>',self.exit)
-        self.lock()
+        if self.settings.get('key')=="":
+            welcome_screen=WelcomeScreen(self,width=self.width,heigh=self.height,bg=self.window_bg,settings=self.settings)
+        else:self.lock()
 
     #bind mouse buttons to file on filelist
     def bind_files(self):
@@ -123,17 +129,7 @@ class MainWindow(Toplevel):
             _thread=threading.Thread(target=self.encrypt_file,args=(fileDialog,))
             _thread.start()
             self.wait_and_load(progress_frame)
-            # ext=fileDialog.split('.')[-1]
-            # file_name=generate_key(str(len(self.vault)))
-            # self.vault[file_name]=ext
-            # with open(fileDialog,"rb") as f:
-            #     data=f.read()
-            #     encrypted_data=encrypt(data,bytes.fromhex(self.settings['key']))
-            #     with open(self.settings['encrypted']+"/"+file_name,"wb") as g:
-            #         g.write(encrypted_data.iv)
-            #         g.write(encrypted_data.ct)
-            # self.update_vault()
-            # self.file_panel.add_file(self.vault)
+
     def wait_and_load(self,progress_frame):
         if self.io_task:self.after(100,self.wait_and_load,progress_frame)
         else:progress_frame.destroy()
@@ -145,7 +141,7 @@ class MainWindow(Toplevel):
         self.vault[file_name]=ext
         with open(file,"rb") as f:
             data=f.read()
-            encrypted_data=encrypt(data,bytes.fromhex(self.settings['key']))
+            encrypted_data=encrypt(data,bytes.fromhex(self.key))
             with open(self.settings['encrypted']+"/"+file_name,"wb") as g:
                 g.write(encrypted_data.iv)
                 g.write(encrypted_data.ct)
@@ -190,7 +186,7 @@ class MainWindow(Toplevel):
         self.io_task=True
         path=self.settings['encrypted']+"/"+file_name
         data=read_encrypted_data(path)
-        decrypted_data=decrypt(data,bytes.fromhex(self.settings.get('key')))
+        decrypted_data=decrypt(data,bytes.fromhex(self.key))
         output_path=self.settings.get('decrypted')+"/"+file_name+"."+self.vault.get(file_name)
         write_decrypted_file(output_path, decrypted_data)
         self.file_history.append(file_name)

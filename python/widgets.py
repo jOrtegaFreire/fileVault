@@ -5,6 +5,92 @@ from PIL import Image
 from aes import password_verify,generate_key
 import pyautogui
 
+class WelcomeScreen(Frame):
+
+    def __init__(self,container,width=1,heigh=1,bg="Black",settings=None):
+        self.container=container
+        self.width=width
+        self.height=heigh
+        self.bg=bg
+        self.settings=settings
+        self.helpLabel=None
+        super().__init__(container,width=width,height=heigh,bg=bg)
+        self.new_userImg=PhotoImage(Image.open("images/new_user.png"))
+        self.loginImg=PhotoImage(Image.open("images/login.png"))
+        self.new_userBtn=Button(self,text="New User",image=self.new_userImg,bg=self.bg,activebackground=self.bg,
+                                bd=0,command=self.newUser)
+        self.import_userBtn=Button(self,text="Import Session",image=self.loginImg,bg=self.bg,activebackground=self.bg,
+                                bd=0,command=self.importUser)
+        padx=self.width-self.new_userBtn.winfo_reqwidth()-self.import_userBtn.winfo_reqwidth()
+        self.new_userBtn.place(x=int(padx/4),y=50)
+        self.import_userBtn.place(x=int(self.new_userBtn.winfo_reqwidth()+(3*padx/4)),y=50)
+        self.exitImg=PhotoImage(Image.open("images/exitBtn.png").resize((50,50)))
+        self.exitBtn=Button(self,image=self.exitImg,bg=self.bg,bd=0,activebackground=self.bg,command=self.exit)
+        self.exitBtn.place(x=self.width-60,y=self.height-60)
+
+        self.new_userBtn.bind('<Enter>',self.on_enter)
+        self.new_userBtn.bind('<Leave>',self.on_leave)
+        self.import_userBtn.bind('<Enter>',self.on_enter)
+        self.import_userBtn.bind('<Leave>',self.on_leave)
+
+        self.show()
+    
+    def on_enter(self,event):
+        self.helpLabel=Label(self,text=event.widget.cget('text'),bg=self.bg,fg="Gray")
+        x=int(event.widget.winfo_x()+(event.widget.winfo_reqwidth()/2)-(self.helpLabel.winfo_reqwidth()/2))
+        y=int(event.widget.winfo_y()+event.widget.winfo_reqheight())
+        self.helpLabel.place(x=x,y=y)
+    def on_leave(self,event):
+        if self.helpLabel!=None:
+            self.helpLabel.destroy()
+            self.helpLabel=None
+    def show(self):
+        self.place(x=0,y=0)
+        self.tkraise()
+    def newUser(self):pass
+
+    def importUser(self):pass
+    def exit(self):self.container.exit(None)
+
+class ImportFrame(Frame):
+    def __init__(self,container,width=1,heigh=1,bg="Black",settings=None):
+        self.container=container
+        self.width=width
+        self.height=heigh
+        self.bg=bg
+        self.settings=settings
+        super().__init__(container,width=width,height=heigh,bg=bg)
+        self.new_userBtn=Button(self,text="New User",bg=self.bg)
+        self.import_userBtn=Button(self,text="Import Session",bg=self.bg)
+
+        self.new_userBtn.place(x=50,y=50)
+        self.import_userBtn.place(x=50,y=100)
+        self.show()
+    
+    def show(self):
+        self.place(x=0,y=0)
+        self.tkraise()
+
+class NewUser(Frame):
+
+    def __init__(self,container,width=1,heigh=1,bg="Black",settings=None):
+        self.container=container
+        self.width=width
+        self.height=heigh
+        self.bg=bg
+        self.settings=settings
+        super().__init__(container,width=width,height=heigh,bg=bg)
+        self.new_userBtn=Button(self,text="New User",bg=self.bg)
+        self.import_userBtn=Button(self,text="Import Session",bg=self.bg)
+
+        self.new_userBtn.place(x=50,y=50)
+        self.import_userBtn.place(x=50,y=100)
+        self.show()
+    
+    def show(self):
+        self.place(x=0,y=0)
+        self.tkraise()
+
 class LockScreen(Frame):
 
     def __init__(self,container,width=1,height=1,bg="Black",settings=None):
@@ -21,7 +107,7 @@ class LockScreen(Frame):
         self.loginBtn=Button(self,image=self.unlockImg,bg=self.bg,bd=0,activebackground=self.bg)
         self.loginBtn.place(x=int((self.width-self.loginBtn.winfo_reqwidth())/2),y=400)
         self.exitImg=PhotoImage(Image.open("images/exitBtn.png").resize((50,50)))
-        self.exitBtn=Button(self,image=self.exitImg,bg=self.bg,bd=0,activebackground=self.bg,command=self.container.exit)
+        self.exitBtn=Button(self,image=self.exitImg,bg=self.bg,bd=0,activebackground=self.bg,command=self.exit)
         self.exitBtn.place(x=self.width-60,y=self.height-60)
         self.errorMsg=Label(self,text="Invalid password",font=("System",16),bg=self.bg,fg="#A01111")
 
@@ -31,9 +117,10 @@ class LockScreen(Frame):
 
     def unlock(self,*args):
         buffer=self.password_entry.get()
-        if password_verify(buffer,self.settings['key']):
+        if password_verify(generate_key(buffer),self.settings['key']):
             self.password_entry.delete(0,END)
             self.place_forget()
+            self.container.key=generate_key(buffer)
         else:
             self.errorMsg.place(x=int((self.width-self.errorMsg.winfo_reqwidth())/2),y=350)
             self.after(500,self.clear)
@@ -41,6 +128,8 @@ class LockScreen(Frame):
     def clear(self):
         self.password_entry.delete(0,END)
         self.errorMsg.place_forget()
+    
+    def exit(self):self.container.exit(None)
 
 class ChangeKeyFrame(Frame):
     def __init__(self,container,width=1,height=1,bg="Black",settings=None):
